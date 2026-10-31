@@ -44,7 +44,7 @@ def download(url: str, workdir: Path) -> tuple[Path, dict]:
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
         path = Path(info["requested_downloads"][0]["filepath"])
-    return path, {"title": info.get("title"), "url": info.get("webpage_url", url)}
+    return path, {"title": info.get("title"), "id": info.get("id"), "url": info.get("webpage_url", url)}
 
 
 def slugify(text: str) -> str:
@@ -52,17 +52,23 @@ def slugify(text: str) -> str:
 
 
 def sample_frames(video: Path, every: float):
+    """Yield (time, frame, skipped) every `every` seconds; `skipped` holds the frames since the last sample."""
     cap = cv2.VideoCapture(str(video))
     if not cap.isOpened():
         sys.exit(f"Could not open video: {video}")
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     step = max(1, round(fps * every))
     i = 0
-    while cap.grab():
+    skipped = []
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
         if i % step == 0:
-            ok, frame = cap.retrieve()
-            if ok:
-                yield i / fps, frame
+            yield i / fps, frame, skipped
+            skipped = []
+        else:
+            skipped.append((i / fps, frame))
         i += 1
     cap.release()
 
@@ -82,25 +88,44 @@ def ink_mask(grey: np.ndarray) -> np.ndarray:
     return np.abs(grey.astype(np.int16) - int(background)) > INK_DIST
 
 
+def only_adds(base: np.ndarray, grey: np.ndarray) -> bool:
+    """True if `grey` keeps all of `base`'s content: few changed pixels were ink, or only a speck of ink changed.
+
+    The speck allowance is absolute rather than a share of all ink, so a big decorative border
+    can't hide a removed word.
+    """
+    changed = changed_mask(base, grey)
+    removed = (changed & ink_mask(base)).sum()
+    return removed <= 0.05 * changed.sum() or removed <= 0.0005 * base.size
+
+
 def find_stable_states(video: Path, every: float, min_hold: float, stable_frac: float) -> list[dict]:
     """Group samples into runs where the picture barely changes; keep each run's last frame."""
     states: list[dict] = []
     run = None
     prev_grey = None
 
-    def close(run):
-        if run and run["end"] - run["start"] >= min_hold:
-            states.append(run)
+    def close(run, skipped):
+        if not (run and run["end"] - run["start"] >= min_hold):
+            return
+        # Slides often finish their last animation just before advancing, between two samples.
+        # Take the last in-between frame that still contains everything on the slide.
+        for t, frame in reversed(skipped):
+            grey = to_grey(frame)
+            if only_adds(run["grey"], grey):
+                run.update(end=t, frame=frame, grey=grey)
+                break
+        states.append(run)
 
-    for t, frame in sample_frames(video, every):
+    for t, frame, skipped in sample_frames(video, every):
         grey = to_grey(frame)
         if prev_grey is not None and changed_mask(prev_grey, grey).mean() < stable_frac:
             run.update(end=t, frame=frame, grey=grey)
         else:
-            close(run)
+            close(run, skipped)
             run = {"start": t, "end": t, "frame": frame, "grey": grey}
         prev_grey = grey
-    close(run)
+    close(run, [])
     return states
 
 
@@ -110,14 +135,8 @@ def merge_builds(states: list[dict], stable_frac: float) -> list[dict]:
     for state in states:
         if merged:
             prev = merged[-1]
-            changed = changed_mask(prev["grey"], state["grey"])
-            if changed.mean() < stable_frac:
-                is_continuation = True
-            else:
-                # A build-up only adds content: nearly all changed pixels were background before.
-                removed = (changed & ink_mask(prev["grey"])).sum() / changed.sum()
-                is_continuation = removed < 0.05
-            if is_continuation:
+            # A build-up step only adds content to the previous state.
+            if only_adds(prev["grey"], state["grey"]) or changed_mask(prev["grey"], state["grey"]).mean() < stable_frac:
                 state["start"] = prev["start"]
                 merged[-1] = state
                 continue
@@ -136,8 +155,8 @@ def main() -> None:
     p.add_argument("source", help="YouTube URL or path to a local video file")
     p.add_argument("--out", default="transcripts", help="output root directory (default: transcripts)")
     p.add_argument("--every", type=float, default=0.5, help="seconds between sampled frames (default: 0.5)")
-    p.add_argument("--min-hold", type=float, default=1.0,
-                   help="seconds a picture must stay still to count as a slide (default: 1.0)")
+    p.add_argument("--min-hold", type=float, default=0.5,
+                   help="seconds a picture must stay still to count as a slide (default: 0.5)")
     p.add_argument("--sensitivity", type=float, default=0.004,
                    help="fraction of changed pixels below which two frames count as the same (default: 0.004)")
     p.add_argument("--keep-video", action="store_true", help="keep the downloaded video next to the slides")
@@ -146,12 +165,16 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         local = Path(args.source)
         if local.exists():
-            video, meta = local, {"title": local.stem, "url": None}
+            video, meta = local, {"title": local.stem, "id": None, "url": None}
         else:
             print(f"Downloading {args.source} ...", file=sys.stderr)
             video, meta = download(args.source, Path(tmp))
 
-        out_dir = Path(args.out) / slugify(meta["title"] or video.stem)
+        # The video id keeps same-titled videos (e.g. two "Lecture 3"s) in separate folders.
+        folder = slugify(meta["title"] or video.stem)
+        if meta["id"]:
+            folder += f"-{meta['id']}"
+        out_dir = Path(args.out) / folder
         slides_dir = out_dir / "slides"
         if slides_dir.exists():
             shutil.rmtree(slides_dir)
