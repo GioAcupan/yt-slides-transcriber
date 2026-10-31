@@ -51,6 +51,17 @@ To only grab the slide images:
 uv run extract_slides.py <url-or-file> [--out transcripts]
 ```
 
+If YouTube says "Sign in to confirm you're not a bot" (it does after several downloads in a
+row), pass your browser login. Cookies are read straight from the browser profile; no
+cookies file is written.
+
+```
+uv run extract_slides.py <url> --cookies-from-browser chrome
+uv run extract_slides.py <url> --cookies-from-browser "firefox:C:\Users\you\AppData\Roaming\zen\Profiles\xxxx.Default (release)"
+```
+
+(Zen and other Firefox-based browsers use `firefox:` plus the profile folder.)
+
 ### Tuning
 
 | Symptom | Fix |

@@ -28,7 +28,7 @@ PIXEL_DIFF = 30  # grey-level change that counts as a "changed" pixel
 INK_DIST = 40  # distance from the background colour that counts as content
 
 
-def download(url: str, workdir: Path) -> tuple[Path, dict]:
+def download(url: str, workdir: Path, cookies_from_browser: str | None = None) -> tuple[Path, dict]:
     import yt_dlp
 
     args = [
@@ -40,9 +40,14 @@ def download(url: str, workdir: Path) -> tuple[Path, dict]:
     # YouTube needs a JS runtime for its challenges; yt-dlp only tries deno by default.
     if not shutil.which("deno") and shutil.which("node"):
         args += ["--js-runtimes", "node"]
+    # Read straight from the browser profile; no cookies file is written.
+    if cookies_from_browser:
+        args += ["--cookies-from-browser", cookies_from_browser]
     opts = yt_dlp.parse_options(args).ydl_opts
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
+        if not info or not info.get("requested_downloads"):
+            sys.exit(f"Download failed for {url} (see the yt-dlp error above).")
         path = Path(info["requested_downloads"][0]["filepath"])
     return path, {"title": info.get("title"), "id": info.get("id"), "url": info.get("webpage_url", url)}
 
@@ -161,6 +166,9 @@ def main() -> None:
     p.add_argument("--sensitivity", type=float, default=0.004,
                    help="fraction of changed pixels below which two frames count as the same (default: 0.004)")
     p.add_argument("--keep-video", action="store_true", help="keep the downloaded video next to the slides")
+    p.add_argument("--cookies-from-browser", metavar="BROWSER[:PROFILE]",
+                   help="use your YouTube login from a browser when YouTube asks to confirm you're not a bot "
+                        "(e.g. chrome, or firefox:<profile folder> for Firefox-based browsers like Zen)")
     args = p.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -169,7 +177,7 @@ def main() -> None:
             video, meta = local, {"title": local.stem, "id": None, "url": None}
         else:
             print(f"Downloading {args.source} ...", file=sys.stderr)
-            video, meta = download(args.source, Path(tmp))
+            video, meta = download(args.source, Path(tmp), args.cookies_from_browser)
 
         # The video id keeps same-titled videos (e.g. two "Lecture 3"s) in separate folders.
         folder = slugify(meta["title"] or video.stem)

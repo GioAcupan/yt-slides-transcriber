@@ -73,6 +73,11 @@ The last stdout line is the output folder (`transcripts/<title>-<video id>/`). I
 are mostly collapsed already. If that folder already has `manifest.json` and `slides/`,
 skip this step.
 
+If the download fails with "Sign in to confirm you're not a bot", stop and report it; don't
+retry or pass cookies yourself. The coordinator should download the backlog one video at a
+time with `--cookies-from-browser <browser>` (only with the user's OK), then give writers
+the already-extracted folders.
+
 If the slide count looks wrong for the video length (e.g. 0, or far more than plausible),
 re-run with a tweak and say what you changed:
 - slides missing / merged together → `--sensitivity 0.002`

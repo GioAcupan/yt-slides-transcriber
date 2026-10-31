@@ -1,2 +1,5 @@
 transcripts/
 __pycache__/
+# YouTube login cookies, if exported to a file
+cookies*.txt
+*.cookies
