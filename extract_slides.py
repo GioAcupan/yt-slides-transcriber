@@ -83,19 +83,20 @@ def changed_mask(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return cv2.absdiff(a, b) > PIXEL_DIFF
 
 
-def ink_mask(grey: np.ndarray) -> np.ndarray:
+def ink_dist(grey: np.ndarray) -> np.ndarray:
     background = np.bincount(grey.ravel(), minlength=256).argmax()
-    return np.abs(grey.astype(np.int16) - int(background)) > INK_DIST
+    return np.abs(grey.astype(np.int16) - int(background))
 
 
 def only_adds(base: np.ndarray, grey: np.ndarray) -> bool:
-    """True if `grey` keeps all of `base`'s content: few changed pixels were ink, or only a speck of ink changed.
+    """True if `grey` keeps all of `base`'s content: little of the changed area was ink that faded.
 
-    The speck allowance is absolute rather than a share of all ink, so a big decorative border
-    can't hide a removed word.
+    Ink that gets stronger (a half-drawn line finishing) isn't removed. The speck allowance is
+    absolute rather than a share of all ink, so a big decorative border can't hide a removed word.
     """
     changed = changed_mask(base, grey)
-    removed = (changed & ink_mask(base)).sum()
+    base_ink = ink_dist(base)
+    removed = (changed & (base_ink > INK_DIST) & (ink_dist(grey) < base_ink)).sum()
     return removed <= 0.05 * changed.sum() or removed <= 0.0005 * base.size
 
 

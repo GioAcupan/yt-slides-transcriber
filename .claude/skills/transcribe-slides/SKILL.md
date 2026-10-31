@@ -39,8 +39,9 @@ give subagents absolute paths.
 > `<repo>/.claude/skills/transcribe-slides/SKILL.md` exactly — read that file first.
 > Video: `<url-or-path>`. Run commands from `<repo>`.
 > When done, reply with only: the output folder path, the slide count, which slides you
-> merged as animation steps, any `[unclear]` items, and anything odd (e.g. a slide held for
-> minutes, a slide that contradicts itself, an extractor re-run with different settings).
+> merged as animation steps, which slides you re-checked in step 3, any `[unclear]` items,
+> and anything odd (e.g. a slide held for minutes, a slide that contradicts itself, an
+> extractor re-run with different settings).
 
 ### Checker prompt
 
@@ -51,8 +52,10 @@ give subagents absolute paths.
 > rules are under "Transcription rules" in `<repo>/.claude/skills/transcribe-slides/SKILL.md`.
 > Open every slide image with the Read tool and compare it to its section: every symbol,
 > sub/superscript, number, table cell, and word; nothing missing or added; headings'
-> times match `manifest.json`. Don't flag layout choices (e.g. `array` for stacked
-> premises) or the omitted repeating footer/logo.
+> times match `manifest.json`. Check merged `## Slides N–M` sections against the merging
+> rule: if the earlier image has anything the later one lacks, or the section copies values
+> from another slide, split it and transcribe each image as shown. Don't flag layout choices
+> (e.g. `array` for stacked premises) or the omitted repeating footer/logo.
 > Fix errors you are certain of directly in `transcript.md` with the Edit tool. If a value is
 > genuinely ambiguous in the image, don't change it — mark it `[unclear: ...]` instead.
 > Reply with only: the list of fixes (slide, was → now), the ambiguous items, and a final
@@ -125,12 +128,26 @@ every slide. Then for each slide:
 - **Figures, graphs, diagrams**: describe them in an italic block — what is plotted, axes and
   labels, key points/intercepts/asymptotes, shaded regions, arrows — so the slide still
   makes sense without the image. Transcribe any text or labels inside the figure exactly.
-- If two consecutive images are the same slide (a leftover animation step, e.g. an empty
-  table then the filled one), transcribe it once using the most complete image, head it
-  `## Slides <n>–<m>`, and give it the combined time range.
+- **Each section describes one image.** Never copy text, values, or table cells from
+  another slide, even if a slide shows a table with cells blanked out or a step removed:
+  transcribe the blanks as blanks (an empty cell, or `—` with a note).
+- **Merging is rare.** The extractor already collapses build-ups, so consecutive images
+  usually differ for a reason (a callout appears while a highlight moves, values are
+  cleared, a row is boxed). Merge two images into one `## Slides <n>–<m>` section (combined
+  time range) only when the earlier one is a half-finished animation frame: text mid-flight
+  or overlapping itself, a half-drawn shape, an empty table, a wipe in progress. Everything
+  it shows must also appear in the later image, so you transcribe only the later image.
+  If anything on the earlier image is missing or different on the later one, give them
+  separate sections. Don't write "slide X only" notes inside a section.
+- Frames with no lecture content (the channel's intro/outro animation, a blank board, a
+  "like and subscribe" end card) get one line each, e.g. `*(channel intro animation)*`, or
+  one merged section for a run of them.
 - If something is genuinely unreadable, write `[unclear: best guess]` rather than inventing.
 
-### 3. Check
+### 3. Check (required)
 
-After all slides are done, re-open the 3–5 slides with the densest math or largest tables and
-compare them symbol by symbol against the transcript; fix any mismatches.
+After all slides are done, re-open the images (Read them again) of the 3–5 slides with the
+densest math or largest tables and compare them symbol by symbol against the transcript; fix
+any mismatches. Don't check by re-deriving the math or truth values yourself: the
+transcript must match the image, not what the answer should be. Also confirm every
+merged section follows the merging rule above. Say which slides you re-checked in your reply.

@@ -56,4 +56,4 @@ uv run extract_slides.py <url-or-file> [--out transcripts]
 |---|---|
 | Slides missing or merged | `--sensitivity 0.002` |
 | Near-duplicate slides | `--sensitivity 0.01` or `--min-hold 2` |
-| Slides flash by quickly | `--min-hold 0.5` |
+| Text that's on screen for under half a second is cut off | `--min-hold 0.25` |
