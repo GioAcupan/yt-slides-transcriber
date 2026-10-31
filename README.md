@@ -1,15 +1,16 @@
 # yt-slides-transcriber
 
-Turns a silent, slides-only lecture video (YouTube link or local file) into Markdown notes,
-with math written as LaTeX.
+Turns a silent, slides-only lecture video (YouTube link or local file) into standalone
+Markdown lecture notes, with math written as LaTeX.
 
 Two parts:
 
 1. **`extract_slides.py`** downloads the video and saves one image per slide. It keeps the
    final state of each slide, so bullets or equations that animate in collapse into one image.
 2. **The `/transcribe-slides` Claude Code skill** hands each video to a Sonnet subagent that
-   runs the extractor, reads each slide image, and writes `transcripts/<video>/transcript.md`.
-   A second Sonnet subagent then checks the transcript against the images and fixes mistakes.
+   runs the extractor, reads the slide images in order, and writes `transcripts/<video>/notes.md`:
+   the slide text organised by topic, each thing once, with no slide numbers or timestamps.
+   A second Sonnet subagent then checks the notes against the images and fixes mistakes.
 
 ## Requirements
 
@@ -28,7 +29,7 @@ From this folder, in Claude Code:
 ```
 
 For a backlog, pass several links, or a text file with one link per line (`#` comments
-allowed). Up to 3 videos run at once, and videos that already have a `transcript.md` are
+allowed). Up to 3 videos run at once, and videos that already have a `notes.md` are
 skipped, so you can re-run the same list as it grows:
 
 ```
@@ -41,7 +42,7 @@ Output, one folder per video:
 transcripts/<video-title>-<video-id>/
   manifest.json      slide list with timestamps
   slides/            slide_001.png, slide_002.png, ...
-  transcript.md      the notes ($...$ / $$...$$ math renders in Obsidian, VS Code, GitHub)
+  notes.md           the lecture notes ($...$ / $$...$$ math renders in Obsidian, VS Code, GitHub)
 ```
 
 To only grab the slide images:
